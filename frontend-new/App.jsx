@@ -299,7 +299,7 @@ setState(
         justifyContent: "center"
       }}
     >
-      📷 Tap Capture Muzzle
+     Tap Capture Muzzle
     </div>
   )}
 </div>
