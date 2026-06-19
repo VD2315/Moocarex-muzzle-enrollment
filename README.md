@@ -25,3 +25,9 @@ npm run dev
 ## Run Backend
 
 uvicorn main:app --reload
+
+## Model files are not included in the repository.
+
+Required:
+- detector.pt
+- classifier.pt
