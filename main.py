@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from pydantic import BaseModel
 
 import cv2
 import numpy as np
@@ -11,6 +12,12 @@ import json
 import uuid
 from datetime import datetime
 from pathlib import Path
+
+from pydantic import BaseModel
+
+class FeedbackRequest(BaseModel):
+    scan_id: str
+    feedback: bool
 
 # =====================================================
 # CONFIG
@@ -67,9 +74,38 @@ def root():
 def health():
     return {"status": "healthy"}
 
+@app.post("/feedback")
+async def save_feedback(data: FeedbackRequest):
+
+    metadata_file = (
+        METADATA_DIR /
+        f"{data.scan_id}.json"
+    )
+
+    if not metadata_file.exists():
+        return {
+            "success": False,
+            "message": "Scan not found"
+        }
+
+    with open(metadata_file, "r") as f:
+        metadata = json.load(f)
+
+    metadata["feedback"] = data.feedback
+
+    with open(metadata_file, "w") as f:
+        json.dump(
+            metadata,
+            f,
+            indent=4
+        )
+
+    return {
+        "success": True
+    }
+
 @app.post("/scan")
 async def scan(file: UploadFile = File(...)):
-
     # ----------------------------------
     # Read image
     # ----------------------------------
@@ -220,6 +256,10 @@ async def scan(file: UploadFile = File(...)):
         crop,
         [cv2.IMWRITE_PNG_COMPRESSION, 0]
         )
+
+        class FeedbackRequest(BaseModel):
+            scan_id: str
+            feedback: bool
 
         metadata = {
     "scan_id": scan_id,
