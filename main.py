@@ -2,6 +2,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from pydantic import BaseModel
+from fastapi import Request
+
 
 import cv2
 import numpy as np
@@ -99,10 +101,17 @@ async def save_feedback(data: FeedbackRequest):
             f,
             indent=4
         )
-
+    
     return {
         "success": True
     }
+
+async def save_feedback(request: Request):
+
+    data = await request.json()
+    print(data)
+
+    return {"success": True}
 
 @app.post("/scan")
 async def scan(file: UploadFile = File(...)):
@@ -326,6 +335,7 @@ async def scan(file: UploadFile = File(...)):
 
     return {
         "success": True,
+        "scan_id": scan_id,
         "det_confidence": round(det_conf, 3),
         "class_name": class_name,
         "cls_confidence": round(cls_conf, 3),

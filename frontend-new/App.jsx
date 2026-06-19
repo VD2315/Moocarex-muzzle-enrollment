@@ -2,12 +2,25 @@ import React, { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
 /* ─── tiny feedback store (localStorage) ─── */
-function saveFeedback(entry) {
+async function saveFeedback(entry) {
   try {
-    const all = JSON.parse(localStorage.getItem('moocarex_feedback') || '[]')
-    all.push({ ...entry, ts: Date.now() })
-    localStorage.setItem('moocarex_feedback', JSON.stringify(all))
-  } catch (_) {}
+    await fetch("http://localhost:8000/feedback", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        scan_id: entry.result.scan_id,
+        feedback: entry.vote === "yes"
+      })
+      
+    })
+
+    console.log("Feedback saved")
+  }
+  catch(err) {
+    console.error("Feedback error:", err)
+  }
 }
 
 
@@ -22,7 +35,7 @@ function Spinner({ size = 28, color = '#0F766E' }) {
   )
 }
 
-const API_URL = "http://10.21.5.106:8000/scan";
+const API_URL = "http://localhost:8000/scan";
 
 /* ─── Confidence bar ─── */
 function ConfBar({ value }) {
@@ -188,7 +201,7 @@ const handleFileCapture = async (e) => {
 
   try {
     const response = await fetch(
-      "http://10.21.5.106:8000/scan",
+      "http://localhost:8000/scan",
       {
         method: "POST",
         body: formData
@@ -200,6 +213,8 @@ const handleFileCapture = async (e) => {
 console.log(data)
 
 const uiResult = {
+  scan_id: data.scan_id,
+
   crop: data.crop_b64
     ? `data:image/png;base64,${data.crop_b64}`
     : null,
@@ -218,6 +233,7 @@ const uiResult = {
 }
 
 setResult(uiResult)
+
 
 setState(
   data.success
