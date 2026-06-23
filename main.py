@@ -25,8 +25,8 @@ class FeedbackRequest(BaseModel):
 # CONFIG
 # =====================================================
 
-DETECTOR_WEIGHTS = "runs/detect/runs/muzzle_detector-7/weights/best.pt"
-CLASSIFIER_WEIGHTS = "runs/classify/train/weights/best.pt"
+DETECTOR_WEIGHTS = "Backend/models/detector_best.pt"
+CLASSIFIER_WEIGHTS = "Backend/models/classifier_best.pt"
 
 SAVE_DIR = Path("storage/cropped_muzzles")
 
