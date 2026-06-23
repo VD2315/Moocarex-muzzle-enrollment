@@ -333,6 +333,12 @@ async def scan(file: UploadFile = File(...)):
                 indent=4
             )
 
+    print("=" * 50)
+    print("CLASS NAME:", class_name)
+    print("IS VIABLE:", is_viable)
+    print("CLS CONF:", cls_conf)
+    print("=" * 50)
+
     return {
         "success": True,
         "scan_id": scan_id,
