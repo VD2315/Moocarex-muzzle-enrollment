@@ -26,7 +26,7 @@ class FeedbackRequest(BaseModel):
 # =====================================================
 
 DETECTOR_WEIGHTS = "Backend/models/detector_best.pt"
-CLASSIFIER_WEIGHTS = "Backend/models/classifier_best.pt"
+CLASSIFIER_WEIGHTS = "Backend/models/classify_best.pt"
 
 SAVE_DIR = Path("storage/cropped_muzzles")
 
