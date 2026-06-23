@@ -113,7 +113,7 @@ async def save_feedback(request: Request):
 
     return {"success": True}
 
-@app.post("/api/scan")
+@app.post("/scan")
 async def scan(file: UploadFile = File(...)):
     # ----------------------------------
     # Read image

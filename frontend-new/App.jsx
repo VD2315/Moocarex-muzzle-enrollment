@@ -4,7 +4,7 @@ import './App.css'
 /* ─── tiny feedback store (localStorage) ─── */
 async function saveFeedback(entry) {
   try {
-    await fetch("http://localhost:8000/feedback", {
+    await fetch("http://35.172.180.49:8000/feedback", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -35,7 +35,7 @@ function Spinner({ size = 28, color = '#0F766E' }) {
   )
 }
 
-const API_URL = "http://localhost:8000/scan";
+const API_URL = "http://35.172.180.49:8000/scan";
 
 /* ─── Confidence bar ─── */
 function ConfBar({ value }) {
@@ -201,7 +201,7 @@ const handleFileCapture = async (e) => {
 
   try {
     const response = await fetch(
-      "http://localhost:8000/scan",
+      "http://35.172.180.49/scan",
       {
         method: "POST",
         body: formData
