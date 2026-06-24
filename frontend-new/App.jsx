@@ -201,7 +201,7 @@ const handleFileCapture = async (e) => {
 
   try {
     const response = await fetch(
-      "http://35.172.180.49/scan",
+      "http://35.172.180.49:8000/scan",
       {
         method: "POST",
         body: formData
