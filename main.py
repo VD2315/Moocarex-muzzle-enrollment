@@ -106,246 +106,191 @@ async def save_feedback(data: FeedbackRequest):
         "success": True
     }
 
-async def save_feedback(request: Request):
-
-    data = await request.json()
-    print(data)
-
-    return {"success": True}
 
 @app.post("/scan")
 async def scan(file: UploadFile = File(...)):
-    # ----------------------------------
-    # Read image
-    # ----------------------------------
-   
-    contents = await file.read()
 
-    image = cv2.imdecode(
-        np.frombuffer(contents, np.uint8),
-        cv2.IMREAD_COLOR
-    )
+    try:
+
+        # ----------------------------------
+        # Read image
+        # ----------------------------------
     
-    
+        contents = await file.read()
 
-    if image is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid image"
-        )
-
-    # ----------------------------------
-    # Detect muzzle
-    # ----------------------------------
-
-    results = detector(
-        image,
-        conf=DETECT_CONF,
-        verbose=False
-    )
-
-    boxes = results[0].boxes
-
-    if boxes is None or len(boxes) == 0:
-        return {
-            "success": False,
-            "message": "No muzzle detected"
-        }
-
-    # Highest confidence box
-    confs = boxes.conf.cpu().numpy()
-
-    best_idx = int(np.argmax(confs))
-
-    x1, y1, x2, y2 = map(
-        int,
-        boxes.xyxy[best_idx].cpu().numpy()
-    )
-
-    det_conf = float(confs[best_idx])
-
-    # ----------------------------------
-    # Padding
-    # ----------------------------------
-
-    h, w = image.shape[:2]
-
-    x1 = max(0, x1 - PADDING)
-    y1 = max(0, y1 - PADDING)
-
-    x2 = min(w, x2 + PADDING)
-    y2 = min(h, y2 + PADDING)
-
-    # ----------------------------------
-    # Crop
-    # ----------------------------------
-
-    crop = image[y1:y2, x1:x2]
-  
-    if crop.size == 0:
-        return {
-            "success": False,
-            "message": "Crop failed"
-        }
-
-    # ----------------------------------
-    # Classify
-    # ----------------------------------
-
-    cls_result = classifier(
-        crop,
-        verbose=False
-    )[0]
-
-    top_class = int(cls_result.probs.top1)
-
-    cls_conf = float(cls_result.probs.top1conf)
-
-    class_name = classifier.names[top_class]
-
-    print(
-        f"Detection={det_conf:.3f} | "
-        f"Class={class_name} | "
-        f"Conf={cls_conf:.3f}"
-    )
-
-    is_viable = class_name.lower() == "good"
-
-    filename = None
-
-    if is_viable:
-
-        scan_id = str(uuid.uuid4())
-
-        filename = f"{scan_id}.png"
-
-        save_path = os.path.join(
-            SAVE_DIR,
-            filename
+        image = cv2.imdecode(
+            np.frombuffer(contents, np.uint8),
+            cv2.IMREAD_COLOR
         )
         
-    # ----------------------------------
-    # Classify
-    # ----------------------------------
-
-    cls_result = classifier(
-        crop,
-        verbose=False
-    )[0]
-
-    top_class = int(cls_result.probs.top1)
-
-    cls_conf = float(cls_result.probs.top1conf)
-
-    class_name = classifier.names[top_class]
-
-    print(
-        f"Detection={det_conf:.3f} | "
-        f"Class={class_name} | "
-        f"Conf={cls_conf:.3f}"
-    )
-
-    is_viable = class_name.lower() == "good"
-
-    filename = None
-
-    if is_viable:
-
-        scan_id = str(uuid.uuid4())
-
-        filename = f"{scan_id}.png"
-
-        save_path = os.path.join(
-            SAVE_DIR,
-            filename
-        )
-
-        cv2.imwrite(
-        save_path,
-        crop,
-        [cv2.IMWRITE_PNG_COMPRESSION, 0]
-        )
-
-        class FeedbackRequest(BaseModel):
-            scan_id: str
-            feedback: bool
-
-        metadata = {
-    "scan_id": scan_id,
-    "timestamp": datetime.now().isoformat(),
-
-    "filename": filename,
-
-    "det_confidence": round(det_conf, 4),
-    "cls_confidence": round(cls_conf, 4),
-
-    "class_name": class_name,
-    "is_viable": is_viable,
-
-    "feedback": None
-}
         
-        metadata_path = (
-            METADATA_DIR /
-            f"{scan_id}.json"
-        )
 
-        with open(metadata_path, "w") as f:
-            json.dump(
-                metadata,
-                f,
-                indent=4
+        if image is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid image"
             )
 
-        saved = cv2.imwrite(
-            save_path,
+        # ----------------------------------
+        # Detect muzzle
+        # ----------------------------------
+
+        results = detector(
+            image,
+            conf=DETECT_CONF,
+            verbose=False
+        )
+
+        boxes = results[0].boxes
+
+        if boxes is None or len(boxes) == 0:
+            return {
+                "success": False,
+                "message": "No muzzle detected"
+            }
+
+        # Highest confidence box
+        confs = boxes.conf.cpu().numpy()
+
+        best_idx = int(np.argmax(confs))
+
+        x1, y1, x2, y2 = map(
+            int,
+            boxes.xyxy[best_idx].cpu().numpy()
+        )
+
+        det_conf = float(confs[best_idx])
+
+        # ----------------------------------
+        # Padding
+        # ----------------------------------
+
+        h, w = image.shape[:2]
+
+        x1 = max(0, x1 - PADDING)
+        y1 = max(0, y1 - PADDING)
+
+        x2 = min(w, x2 + PADDING)
+        y2 = min(h, y2 + PADDING)
+
+        # ----------------------------------
+        # Crop
+        # ----------------------------------
+
+        crop = image[y1:y2, x1:x2]
+    
+        if crop.size == 0:
+            return {
+                "success": False,
+                "message": "Crop failed"
+            }
+            
+        # ----------------------------------
+        # Classify
+        # ----------------------------------
+
+        cls_result = classifier(
             crop,
-            [cv2.IMWRITE_PNG_COMPRESSION, 0]
+            verbose=False
+        )[0]
+
+        if cls_result.probs is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Classifier returned no probabilities"
             )
 
-        print("SAVE PATH:", save_path)
-        print("SAVE SUCCESS:", saved)
+        top_class = int(cls_result.probs.top1)
 
-        metadata = {
-    "scan_id": scan_id,
-    "timestamp": datetime.now().isoformat(),
+        cls_conf = float(cls_result.probs.top1conf)
 
-    "filename": filename,
+        class_name = classifier.names[top_class]
 
-    "det_confidence": round(det_conf, 4),
-    "cls_confidence": round(cls_conf, 4),
-
-    "class_name": class_name,
-    "is_viable": is_viable,
-
-    "feedback": None
-}
-        
-        metadata_path = (
-            METADATA_DIR /
-            f"{scan_id}.json"
+        print(
+            f"Detection={det_conf:.3f} | "
+            f"Class={class_name} | "
+            f"Conf={cls_conf:.3f}"
         )
 
-        with open(metadata_path, "w") as f:
-            json.dump(
-                metadata,
-                f,
-                indent=4
+        is_viable = class_name.lower() == "good"
+
+        filename = None
+        scan_id = None
+
+        if is_viable:
+
+            scan_id = str(uuid.uuid4())
+
+            filename = f"{scan_id}.png"
+
+            save_path = SAVE_DIR / filename
+
+            saved = cv2.imwrite(
+                save_path,
+                crop,
+                [cv2.IMWRITE_PNG_COMPRESSION, 0]
+                )
+            
+            if not saved:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to save image"
+                )
+
+            print("SAVE PATH:", save_path)
+            print("SAVE SUCCESS:", saved)
+
+            metadata = {
+                "scan_id": scan_id,
+                "timestamp": datetime.now().isoformat(),
+
+                "filename": filename,
+
+                "det_confidence": round(det_conf, 4),
+                "cls_confidence": round(cls_conf, 4),
+
+                "class_name": class_name,
+                "is_viable": is_viable,
+
+                "feedback": None
+            }
+            
+            metadata_path = (
+                METADATA_DIR /
+                f"{scan_id}.json"
             )
 
-    print("=" * 50)
-    print("CLASS NAME:", class_name)
-    print("IS VIABLE:", is_viable)
-    print("CLS CONF:", cls_conf)
-    print("=" * 50)
+            with open(metadata_path, "w") as f:
+                json.dump(
+                    metadata,
+                    f,
+                    indent=4
+                )
 
-    return {
-        "success": True,
-        "scan_id": scan_id,
-        "det_confidence": round(det_conf, 3),
-        "class_name": class_name,
-        "cls_confidence": round(cls_conf, 3),
-        "is_viable": is_viable,
-        "filename": filename
-    }
+        print("=" * 50)
+        print("CLASS NAME:", class_name)
+        print("IS VIABLE:", is_viable)
+        print("CLS CONF:", cls_conf)
+        print("=" * 50)
 
+        return {
+            "success": True,
+            "scan_id": scan_id,
+            "det_confidence": round(det_conf, 3),
+            "class_name": class_name,
+            "cls_confidence": round(cls_conf, 3),
+            "is_viable": is_viable,
+            "filename": filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+
+        print("=" * 50)
+        print("SCAN ERROR:", str(e))
+        print("=" * 50)
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
