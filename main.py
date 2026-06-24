@@ -28,15 +28,17 @@ class FeedbackRequest(BaseModel):
 DETECTOR_WEIGHTS = "Backend/models/detector_best.pt"
 CLASSIFIER_WEIGHTS = "Backend/models/classify_best.pt"
 
-SAVE_DIR = Path("storage/cropped_muzzles")
+GOOD_DIR = Path("storage/good_muzzles")
+BAD_DIR = Path("storage/bad_muzzles")
+
+GOOD_DIR.mkdir(parents=True, exist_ok=True)
+BAD_DIR.mkdir(parents=True, exist_ok=True)
 
 METADATA_DIR = Path("storage/metadata")
 METADATA_DIR.mkdir(parents=True, exist_ok=True)
 
 DETECT_CONF = 0.45
 PADDING = 20
-
-os.makedirs(SAVE_DIR, exist_ok=True)
 
 # =====================================================
 # APP
@@ -113,7 +115,7 @@ async def scan(file: UploadFile = File(...)):
     try:
 
         # ----------------------------------
-        # Read image
+        # Read imag
         # ----------------------------------
     
         contents = await file.read()
@@ -223,7 +225,7 @@ async def scan(file: UploadFile = File(...)):
 
             filename = f"{scan_id}.png"
 
-            save_path = SAVE_DIR / filename
+            save_path = GOOD_DIR / filename
 
             saved = cv2.imwrite(
                 save_path,
@@ -266,7 +268,9 @@ async def scan(file: UploadFile = File(...)):
                     f,
                     indent=4
                 )
-
+        else:
+            save_path = BAD_DIR / filename
+            
         print("=" * 50)
         print("CLASS NAME:", class_name)
         print("IS VIABLE:", is_viable)
