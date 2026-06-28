@@ -323,6 +323,37 @@
   color: var(--primary);
 }
 
+.save-banner{
+    display:flex;
+    align-items:center;
+    gap:14px;
+
+    background:#ECFDF5;
+    border:1px solid #34D399;
+
+    padding:14px 18px;
+
+    border-radius:12px;
+
+    margin-bottom:18px;
+}
+
+.save-icon{
+    font-size:28px;
+}
+
+.save-title{
+    margin:0;
+    font-weight:700;
+    color:#065F46;
+}
+
+.save-sub{
+    margin:4px 0 0;
+    color:#047857;
+    font-size:.92rem;
+}
+
 /* badges */
 .badge {
   font-family: var(--mono);

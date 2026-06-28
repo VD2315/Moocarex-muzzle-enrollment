@@ -121,6 +121,15 @@ function ResultSuccess({ data, onRescan }) {
 function ResultRejected({ data, onRescan }) {
   return (
     <div className="result-card fade-in">
+      <div className="save-banner">
+      <span className="save-icon">✓</span>
+       <div>
+       <p className="save-title">Muzzle image saved successfully</p>
+       <p className="save-sub">
+        The image has been stored for biometric enrollment.
+       </p>
+      </div>
+      </div>
       <div className="result-header rejected-header">
         <span className="result-icon warn">⚠</span>
         <div>
@@ -158,6 +167,15 @@ function ResultRejected({ data, onRescan }) {
 function ResultNoDetection({ onRescan }) {
   return (
     <div className="result-card fade-in">
+      <div className="save-banner">
+        <span className="save-icon">✓</span>
+        <div>
+         <p className="save-title">Muzzle image saved successfully</p>
+         <p className="save-sub">
+         The image has been stored for biometric enrollment.
+         \ </p>
+       </div>
+      </div>
       <div className="result-header no-det-header">
         <span className="result-icon fail">✕</span>
         <div>
