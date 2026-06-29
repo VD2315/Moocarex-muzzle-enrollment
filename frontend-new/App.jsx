@@ -8,7 +8,7 @@ const isLocal = window.location.hostname === 'localhost' ||
                 window.location.hostname.startsWith('172.');
 
 const API_BASE = isLocal
-  ? `http://${window.location.hostname}:8001`
+  ? `http://${window.location.hostname}:8000`
   : 'http://35.172.180.49:8000';
 
 /* ─── tiny feedback store (localStorage) ─── */
