@@ -1,10 +1,20 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import './App.css'
 
+const isLocal = window.location.hostname === 'localhost' || 
+                window.location.hostname === '127.0.0.1' || 
+                window.location.hostname.startsWith('192.168.') || 
+                window.location.hostname.startsWith('10.') || 
+                window.location.hostname.startsWith('172.');
+
+const API_BASE = isLocal
+  ? `http://${window.location.hostname}:8001`
+  : 'http://35.172.180.49:8000';
+
 /* ─── tiny feedback store (localStorage) ─── */
 async function saveFeedback(entry) {
   try {
-    await fetch("http://35.172.180.49:8000/feedback", {
+    await fetch(`${API_BASE}/feedback`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
@@ -34,8 +44,6 @@ function Spinner({ size = 28, color = '#0F766E' }) {
     </svg>
   )
 }
-
-const API_URL = "http://35.172.180.49:8000/scan";
 
 /* ─── Confidence bar ─── */
 function ConfBar({ value }) {
@@ -87,12 +95,14 @@ function FeedbackWidget({ result }) {
 function ResultSuccess({ data, onRescan }) {
   return (
     <div className="result-card fade-in">
-      <div className="result-header success-header">
-        <span className="result-icon">✓</span>
-        <div>
-          <p className="result-title">Enrollment Quality Confirmed</p>
-          <p className="result-sub">Accepted for biometric enrollment</p>
-        </div>
+     <div className="save-banner">
+      <span className="save-icon">✓</span>
+       <div>
+       <p className="save-title">Muzzle image saved successfully</p>
+       <p className="save-sub">
+        The image has been stored for biometric enrollment.
+       </p>
+      </div>
       </div>
       {data.crop && <img src={data.crop} alt="Cropped muzzle" className="crop-img" />}
       <div className="metrics">
@@ -203,73 +213,277 @@ export default function App() {
   const [result, setResult] = useState(null)
   const fileInputRef = useRef(null)
   const [selectedImage, setSelectedImage] = useState(null)
-  
-  
- 
+  const videoRef = useRef(null)
+  const [stream, setStream] = useState(null)
+  const [cameraError, setCameraError] = useState(false)
+  const [isAutoScanning, setIsAutoScanning] = useState(true)
+  const [scanningStatus, setScanningStatus] = useState("Position muzzle inside guide")
+  const [isMirrored, setIsMirrored] = useState(false)
 
-const handleFileCapture = async (e) => {
-  const file = e.target.files?.[0]
+  const showCamera = ['idle', 'scanning'].includes(state)
 
-  if (!file) return
+  // Manage camera stream lifecycle
+  useEffect(() => {
+    let active = true;
+    let localStream = null;
 
-  setState("scanning")
-
-  const formData = new FormData()
-  formData.append("file", file)
-
-  try {
-    const response = await fetch(
-      "http://35.172.180.49:8000/scan",
-      {
-        method: "POST",
-        body: formData
+    async function startCamera() {
+      if (!showCamera) return;
+      try {
+        setCameraError(false);
+        const constraints = {
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        };
+        const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (active) {
+          localStream = mediaStream;
+          setStream(mediaStream);
+          if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream;
+          }
+        } else {
+          mediaStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        console.error("Camera access error:", err);
+        if (active) {
+          setCameraError(true);
+        }
       }
-    )
+    }
 
-    const data = await response.json()
+    startCamera();
 
-console.log(data)
+    return () => {
+      active = false;
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      setStream(null);
+    };
+  }, [showCamera]);
 
-const uiResult = {
-  scan_id: data.scan_id,
+  // Bind stream to video element when it mounts and stream is ready
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+      const videoTrack = stream.getVideoTracks()[0];
+      if (videoTrack) {
+        const settings = videoTrack.getSettings();
+        const shouldMirror = !settings || settings.facingMode !== 'environment';
+        setIsMirrored(shouldMirror);
+      } else {
+        setIsMirrored(true);
+      }
+    }
+  }, [stream]);
 
-  crop: data.crop_b64
-    ? `data:image/png;base64,${data.crop_b64}`
-    : null,
+  // Auto-scan / Auto-capture loop
+  useEffect(() => {
+    if (!showCamera || !stream || state !== 'idle' || !isAutoScanning) return;
 
-  detectionConfidence: Math.round(
-    data.det_confidence * 100
-  ),
+    let timerId = null;
 
-  qualityConfidence: Math.round(
-    data.cls_confidence * 100
-  ),
+    const captureAndScan = async () => {
+      if (!videoRef.current) return;
 
-  quality: data.class_name,
+      const video = videoRef.current;
+      if (video.readyState !== video.HAVE_ENOUGH_DATA) {
+        timerId = setTimeout(captureAndScan, 1000);
+        return;
+      }
 
-  isViable: data.is_viable
-}
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-setResult(uiResult)
+      canvas.toBlob(async (blob) => {
+        if (!blob) {
+          timerId = setTimeout(captureAndScan, 1500);
+          return;
+        }
 
+        const file = new File([blob], "scan.png", { type: "image/png" });
+        const formData = new FormData();
+        formData.append("file", file);
 
-setState(
-  data.success
-    ? "success"
-    : "rejected"
-)
+        setScanningStatus("Scanning muzzle pattern...");
+        try {
+          const response = await fetch(`${API_BASE}/scan`, {
+            method: "POST",
+            body: formData
+          });
+          const data = await response.json();
 
-  } catch (err) {
-    console.error(err)
-    setState("rejected")
+          if (data.success) {
+            const uiResult = {
+              scan_id: data.scan_id,
+              crop: data.crop_b64 ? `data:image/png;base64,${data.crop_b64}` : null,
+              detectionConfidence: Math.round(data.det_confidence * 100),
+              qualityConfidence: Math.round(data.cls_confidence * 100),
+              quality: data.class_name,
+              isViable: data.is_viable,
+              reason: data.class_name === "poor"
+                ? "Low resolution or blurry pattern"
+                : data.class_name === "bad"
+                  ? "Incorrect muzzle position or angle"
+                  : "Not suitable for enrollment"
+            };
+
+            setResult(uiResult);
+            if (data.is_viable) {
+              setState("success");
+            } else {
+              setState("rejected");
+            }
+          } else {
+            setScanningStatus("No muzzle detected. Adjust angle/distance.");
+            timerId = setTimeout(captureAndScan, 1500);
+          }
+        } catch (err) {
+          console.error("Auto scan error:", err);
+          timerId = setTimeout(captureAndScan, 2000);
+        }
+      }, "image/png");
+    };
+
+    timerId = setTimeout(captureAndScan, 1500);
+
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [showCamera, stream, state, isAutoScanning]);
+
+  const handleManualCapture = async () => {
+    if (!videoRef.current) return;
+    setState("scanning");
+    setScanningStatus("Capturing & analyzing...");
+
+    const video = videoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) {
+        setState("idle");
+        setScanningStatus("Capture failed. Try again.");
+        return;
+      }
+
+      const file = new File([blob], "scan.png", { type: "image/png" });
+      const formData = new FormData();
+      formData.append("file", file);
+
+      try {
+        const response = await fetch(`${API_BASE}/scan`, {
+          method: "POST",
+          body: formData
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+          setResult(null);
+          setState("no_detection");
+          return;
+        }
+
+        const uiResult = {
+          scan_id: data.scan_id,
+          crop: data.crop_b64 ? `data:image/png;base64,${data.crop_b64}` : null,
+          detectionConfidence: Math.round(data.det_confidence * 100),
+          qualityConfidence: Math.round(data.cls_confidence * 100),
+          quality: data.class_name,
+          isViable: data.is_viable,
+          reason: data.class_name === "poor"
+            ? "Low resolution or blurry pattern"
+            : data.class_name === "bad"
+              ? "Incorrect muzzle position or angle"
+              : "Not suitable for enrollment"
+        };
+
+        setResult(uiResult);
+        setState(data.is_viable ? "success" : "rejected");
+      } catch (err) {
+        console.error("Manual capture error:", err);
+        setState("rejected");
+      }
+    }, "image/png");
+  };
+
+  const handleFileCapture = async (e) => {
+    const file = e.target.files?.[0]
+
+    if (!file) return
+
+    setState("scanning")
+
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const response = await fetch(
+        `${API_BASE}/scan`,
+        {
+          method: "POST",
+          body: formData
+        }
+      )
+
+      const data = await response.json()
+
+      console.log(data)
+
+      if (!data.success) {
+        setResult(null)
+        setState("no_detection")
+        return
+      }
+
+      const uiResult = {
+        scan_id: data.scan_id,
+        crop: data.crop_b64
+          ? `data:image/png;base64,${data.crop_b64}`
+          : null,
+        detectionConfidence: Math.round(data.det_confidence * 100),
+        qualityConfidence: Math.round(data.cls_confidence * 100),
+        quality: data.class_name,
+        isViable: data.is_viable,
+        reason: data.class_name === "poor"
+          ? "Low resolution or blurry pattern"
+          : data.class_name === "bad"
+            ? "Incorrect muzzle position or angle"
+            : "Not suitable for enrollment"
+      }
+
+      setResult(uiResult)
+
+      setState(
+        data.is_viable
+          ? "success"
+          : "rejected"
+      )
+
+    } catch (err) {
+      console.error(err)
+      setState("rejected")
+    }
   }
-}
+
   const rescan = useCallback(() => {
     setState('idle')
     setResult(null)
+    setScanningStatus("Position muzzle inside guide")
   }, [])
-
-  const showCamera = ['idle','scanning'].includes(state)
 
   return (
     <div className="app">
@@ -299,13 +513,12 @@ setState(
       </header>
 
       <input
-  ref={fileInputRef}
-  type="file"
-  accept="image/*"
-  capture="environment"
-  style={{ display: 'none' }}
-  onChange={handleFileCapture}
-/>
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        style={{ display: 'none' }}
+        onChange={handleFileCapture}
+      />
 
       {/* ── Main ── */}
       <main className="main">
@@ -314,54 +527,108 @@ setState(
         {showCamera && (
           <section className="scanner-section fade-in">
             <div className="camera-wrapper">
-  {selectedImage ? (
-    <img
-      src={selectedImage}
-      alt="Captured muzzle"
-      style={{
-        width: "100%",
-        height: "100%",
-        objectFit: "cover"
-      }}
-    />
-  ) : (
-    <div
-      style={{
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center"
-      }}
-    >
-     Tap Capture Muzzle
-    </div>
-  )}
-</div>
+              {cameraError ? (
+                <div className="cam-error">
+                  <span style={{ fontSize: "2rem" }}>📷</span>
+                  <p style={{ fontWeight: 600, margin: "8px 0 4px" }}>Camera Access Failed</p>
+                  <p style={{ fontSize: "12px", color: "var(--text-3)", marginBottom: "16px" }}>
+                    Please grant camera permissions, or use a browser that supports WebRTC.
+                  </p>
+                  <button 
+                    className="fb-btn" 
+                    onClick={() => fileInputRef.current?.click()}
+                    style={{ background: "var(--primary)", color: "white", borderColor: "var(--primary)", padding: "8px 16px" }}
+                  >
+                    Upload Photo Manually
+                  </button>
+                </div>
+              ) : stream ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`camera-video ${isMirrored ? 'mirrored' : ''}`}
+                  />
+                  {/* Muzzle cutout overlay */}
+                  <div className="muzzle-overlay-container">
+                    <svg viewBox="0 0 400 300" className="muzzle-overlay-svg" preserveAspectRatio="xMidYMid slice">
+                      <defs>
+                        <mask id="muzzle-mask">
+                          <rect x="0" y="0" width="100%" height="100%" fill="white" />
+                          <path d="M 150 110 Q 200 95 250 110 T 290 155 Q 300 195 260 215 T 200 225 T 140 215 Q 100 195 110 155 Z" fill="black" />
+                        </mask>
+                      </defs>
+                      <rect x="0" y="0" width="100%" height="100%" fill="rgba(15, 23, 42, 0.65)" mask="url(#muzzle-mask)" />
+                      <path 
+                        d="M 150 110 Q 200 95 250 110 T 290 155 Q 300 195 260 215 T 200 225 T 140 215 Q 100 195 110 155 Z" 
+                        fill="none" 
+                        stroke="#0F766E" 
+                        strokeWidth="3.5" 
+                        strokeDasharray="6 4" 
+                        className="muzzle-outline-glow"
+                      />
+                    </svg>
+                    
+                    {/* Sweeping scan line */}
+                    {state === 'idle' && <div className="scan-line" />}
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    height: "100%",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "12px",
+                    color: "var(--text-3)"
+                  }}
+                >
+                  <Spinner size={32} />
+                  <span>Starting camera feed...</span>
+                </div>
+              )}
+            </div>
             
-
             {state === 'idle' && (
               <div className="ready-hint">
                 <span className="dot-pulse" />
-                <span>Ready to scan — position the muzzle in front of the camera</span>
+                <span>{scanningStatus}</span>
               </div>
             )}
 
             {state === 'scanning' && (
               <div className="scanning-hint">
                 <Spinner />
-                <span>Analyzing image…</span>
+                <span>{scanningStatus}</span>
               </div>
             )}
 
-            <button
-              className={`btn-capture ${state === 'scanning' ? 'btn-capture--busy' : ''}`}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={state === 'scanning'}
-            >
-              {state === 'scanning' ? (
-                <><Spinner size={18} color="white" /> Detecting muzzle…</>
-              ) : 'Capture Muzzle'}
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+              <button
+                className={`btn-capture ${state === 'scanning' ? 'btn-capture--busy' : ''}`}
+                onClick={handleManualCapture}
+                disabled={state === 'scanning' || !stream}
+              >
+                {state === 'scanning' ? (
+                  <><Spinner size={18} color="white" /> Scanning...</>
+                ) : 'Capture Muzzle'}
+              </button>
+              
+              {!cameraError && (
+                <button
+                  className="fb-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={state === 'scanning'}
+                  style={{ padding: "10px", fontSize: "13.5px" }}
+                >
+                  📂 Select Image from Gallery
+                </button>
+              )}
+            </div>
           </section>
         )}
 

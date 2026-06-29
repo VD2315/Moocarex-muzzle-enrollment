@@ -215,33 +215,30 @@ async def scan(file: UploadFile = File(...)):
 
         is_viable = class_name.lower() == "good"
 
-        filename = None
-        scan_id = None
+        scan_id = str(uuid.uuid4())
+
+        filename = f"{scan_id}.png"
 
         if is_viable:
 
-            scan_id = str(uuid.uuid4())
-
-            filename = f"{scan_id}.png"
-
             save_path = GOOD_DIR / filename
+            
+        else:
+            save_path = BAD_DIR / filename
 
-            saved = cv2.imwrite(
+        saved = cv2.imwrite(
                 save_path,
                 crop,
                 [cv2.IMWRITE_PNG_COMPRESSION, 0]
                 )
             
-            if not saved:
+        if not saved:
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to save image"
                 )
-
-            print("SAVE PATH:", save_path)
-            print("SAVE SUCCESS:", saved)
-
-            metadata = {
+        
+        metadata = {
                 "scan_id": scan_id,
                 "timestamp": datetime.now().isoformat(),
 
@@ -253,22 +250,23 @@ async def scan(file: UploadFile = File(...)):
                 "class_name": class_name,
                 "is_viable": is_viable,
 
-                "feedback": None
+                "feedback": None,
+                "detector_version": "detector_best.pt",
+                "classifier_version": "classify_best.pt",
             }
             
-            metadata_path = (
+        metadata_path = (
                 METADATA_DIR /
                 f"{scan_id}.json"
             )
 
-            with open(metadata_path, "w") as f:
+        with open(metadata_path, "w") as f:
                 json.dump(
                     metadata,
                     f,
                     indent=4
                 )
-        else:
-            save_path = BAD_DIR / filename
+
             
         print("=" * 50)
         print("CLASS NAME:", class_name)
